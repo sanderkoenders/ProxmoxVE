@@ -29,7 +29,9 @@ function update_script() {
 
   CHOICE=$(msg_menu "BorgBackup Server Update Options" \
     "1" "Update BorgBackup Server" \
-    "2" "Reset SSH Access")
+    "2" "Reset SSH Access" \
+    "3" "Enable password authentication for backup user (not recommended, use SSH key instead)" \
+    "4" "Disable password authentication for backup user (recommended for security, use SSH key)")
 
   case $CHOICE in
   1)    
@@ -46,8 +48,9 @@ function update_script() {
     msg_info "Setting up SSH Public Key for backup user"
     
     # Get SSH public key from user
-    msg_info "Please paste your SSH public key (e.g., ssh-rsa AAAAB3... user@host):"
-    read -r SSH_PUBLIC_KEY
+    msg_info "Please paste your SSH public key (e.g., ssh-rsa AAAAB3... user@host): \n"
+    read -p "Key: " SSH_PUBLIC_KEY
+    echo
     
     if [[ -z "$SSH_PUBLIC_KEY" ]]; then
       msg_error "No SSH public key provided!"
@@ -71,8 +74,25 @@ function update_script() {
     chmod 600 /home/backup/.ssh/authorized_keys
     
     msg_ok "SSH access configured for backup user"
-    msg_info "SSH access details:"
-    msg_info "Connection: ssh backup@${IP}"
+    ;;
+  3)
+    if [[ "${PHS_SILENT:-0}" == "1" ]]; then
+      msg_warn "Enabling password authentication requires interactive mode, skipping."
+      exit
+    fi
+
+    msg_info "Enabling password authentication for backup user"
+    msg_warn "Password authentication is less secure than using SSH keys. Consider using SSH keys instead."
+    passwd backup
+    sed -i 's/^#*\s*PasswordAuthentication\s\+\(yes\|no\)/PasswordAuthentication yes/' /etc/ssh/sshd_config
+    rc-service sshd restart
+    msg_ok "Password authentication enabled for backup user"
+    ;;
+  4)
+    msg_info "Disabling password authentication for backup user"
+    sed -i 's/^#*\s*PasswordAuthentication\s\+\(yes\|no\)/PasswordAuthentication no/' /etc/ssh/sshd_config
+    rc-service sshd restart
+    msg_ok "Password authentication disabled for backup user"
     ;;
   esac
   
@@ -88,6 +108,6 @@ description
 # ============================================================================
 msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} Setup has been successfully initialized!${CL}"
-echo -e "${INFO}${YW} Connection information:${CL}"
+echo -e "${INFO}${YW}Connection information:${CL}"
 echo -e "${TAB}${GATEWAY}${BGN}ssh backup@${IP}${CL}"
-echo -e "${TAB}${VERIFYPW}${YW} To set SSH key, run this script with the 'update' option and select option 2'${CL}"
+echo -e "${TAB}${VERIFYPW}${YW}To set SSH key, run this script with the 'update' option and select option 2'${CL}"
